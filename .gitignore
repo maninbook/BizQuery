@@ -1,0 +1,18 @@
+# 파이썬
+.venv/
+__pycache__/
+*.pyc
+
+# 시크릿 (절대 커밋 금지)
+.env
+
+# 생성 데이터 (data/generate.py 로 재생성)
+data/*.duckdb
+data/*.duckdb.wal
+
+# 프론트엔드
+web/node_modules/
+web/dist/
+
+# OS
+.DS_Store

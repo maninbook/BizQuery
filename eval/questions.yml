@@ -1,0 +1,222 @@
+# Top-30 질의 시뮬레이션 세트
+# 각 질의는 (자연어 질문, 정답 SQL, 난이도)로 구성. 정답 SQL은 카탈로그 산식 기준으로
+# 직접 작성했으며, 평가는 실행 결과 비교(execution accuracy)로 한다.
+# easy: 단일 필터+집계 / medium: 그룹·순위·다중조건 / hard: 전년비·비중·윈도우
+
+questions:
+  # ---------- easy (10) ----------
+  - id: 1
+    difficulty: easy
+    question: 2025년 전사 매출액(원)을 알려줘
+    gold: |
+      SELECT SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END) AS revenue
+      FROM mart_financials WHERE year=2025
+  - id: 2
+    difficulty: easy
+    question: 2024년 전사 판관비 총액(원)은?
+    gold: |
+      SELECT SUM(CASE WHEN account_group='판관비' AND version='ACTUAL' THEN amount ELSE 0 END) AS sga
+      FROM mart_financials WHERE year=2024
+  - id: 3
+    difficulty: easy
+    question: 2025년 1분기 전사 매출액(원)은?
+    gold: |
+      SELECT SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END) AS revenue
+      FROM mart_financials WHERE year=2025 AND quarter=1
+  - id: 4
+    difficulty: easy
+    question: 2025년 반도체사업부의 매출액(원)은?
+    gold: |
+      SELECT SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END) AS revenue
+      FROM mart_financials WHERE year=2025 AND division='반도체사업부'
+  - id: 5
+    difficulty: easy
+    question: 2025년 DRAM 모듈의 판매수량 합계는?
+    gold: |
+      SELECT SUM(quantity) AS sales_quantity FROM mart_sales
+      WHERE year=2025 AND product_name='DRAM 모듈'
+  - id: 6
+    difficulty: easy
+    question: 2024년 지역별 판매금액을 보여줘 (지역, 판매금액)
+    gold: |
+      SELECT region, SUM(revenue) AS sales_revenue FROM mart_sales
+      WHERE year=2024 GROUP BY region
+  - id: 7
+    difficulty: easy
+    question: 2025년 채널별 판매수량을 보여줘 (채널, 판매수량)
+    gold: |
+      SELECT channel, SUM(quantity) AS sales_quantity FROM mart_sales
+      WHERE year=2025 GROUP BY channel
+  - id: 8
+    difficulty: easy
+    question: 2025년 월별 매출액 추이를 보여줘 (월, 매출액)
+    gold: |
+      SELECT month_date, SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END) AS revenue
+      FROM mart_financials WHERE year=2025 GROUP BY month_date ORDER BY month_date
+  - id: 9
+    difficulty: easy
+    question: 2026년 상반기(1~6월) 전사 영업이익(원)은?
+    gold: |
+      SELECT SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) AS operating_profit
+      FROM mart_financials WHERE year=2026 AND month<=6
+  - id: 10
+    difficulty: easy
+    question: 2024년 광고선전비 실적 총액(원)은?
+    gold: |
+      SELECT SUM(amount) AS amt FROM mart_financials
+      WHERE year=2024 AND account_name='광고선전비' AND version='ACTUAL'
+
+  # ---------- medium (12) ----------
+  - id: 11
+    difficulty: medium
+    question: 2025년 사업부별 영업이익(원)을 보여줘 (사업부, 영업이익)
+    gold: |
+      SELECT division, SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) AS operating_profit
+      FROM mart_financials WHERE year=2025 GROUP BY division
+  - id: 12
+    difficulty: medium
+    question: 2025년 매출액 상위 3개 코스트센터를 보여줘 (코스트센터명, 매출액)
+    gold: |
+      SELECT cc_name, SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END) AS revenue
+      FROM mart_financials WHERE year=2025 GROUP BY cc_name ORDER BY revenue DESC LIMIT 3
+  - id: 13
+    difficulty: medium
+    question: 2025년 판매금액 상위 5개 제품을 보여줘 (제품명, 판매금액)
+    gold: |
+      SELECT product_name, SUM(revenue) AS sales_revenue FROM mart_sales
+      WHERE year=2025 GROUP BY product_name ORDER BY sales_revenue DESC LIMIT 5
+  - id: 14
+    difficulty: medium
+    question: 2024년 전사 매출 계획달성률(%)은?
+    gold: |
+      SELECT ROUND(SUM(CASE WHEN version='ACTUAL' THEN amount ELSE 0 END) * 100.0
+        / NULLIF(SUM(CASE WHEN version='PLAN' THEN amount ELSE 0 END), 0), 1) AS plan_attainment
+      FROM mart_financials WHERE year=2024 AND account_group='매출'
+  - id: 15
+    difficulty: medium
+    question: 2025년 사업부별 매출 계획달성률(%)을 보여줘 (사업부, 달성률)
+    gold: |
+      SELECT division, ROUND(SUM(CASE WHEN version='ACTUAL' THEN amount ELSE 0 END) * 100.0
+        / NULLIF(SUM(CASE WHEN version='PLAN' THEN amount ELSE 0 END), 0), 1) AS plan_attainment
+      FROM mart_financials WHERE year=2025 AND account_group='매출' GROUP BY division
+  - id: 16
+    difficulty: medium
+    question: 2025년 분기별 영업이익률(%)을 보여줘 (분기, 영업이익률)
+    gold: |
+      SELECT quarter, ROUND(SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) * 100.0
+        / NULLIF(SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END), 0), 1) AS operating_margin
+      FROM mart_financials WHERE year=2025 GROUP BY quarter
+  - id: 17
+    difficulty: medium
+    question: 2025년 제품 카테고리별 판매수량과 판매금액을 보여줘 (카테고리, 판매수량, 판매금액)
+    gold: |
+      SELECT category, SUM(quantity) AS sales_quantity, SUM(revenue) AS sales_revenue
+      FROM mart_sales WHERE year=2025 GROUP BY category
+  - id: 18
+    difficulty: medium
+    question: 재무 데이터 기준으로 2024년 4분기 지역별 매출액을 보여줘 (지역, 매출액)
+    gold: |
+      SELECT region, SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END) AS revenue
+      FROM mart_financials WHERE year=2024 AND quarter=4 GROUP BY region
+  - id: 19
+    difficulty: medium
+    question: 2025년 미주 지역의 월별 판매금액 추이를 보여줘 (월, 판매금액)
+    gold: |
+      SELECT month_date, SUM(revenue) AS sales_revenue FROM mart_sales
+      WHERE year=2025 AND region='미주' GROUP BY month_date ORDER BY month_date
+  - id: 20
+    difficulty: medium
+    question: 2025년 계정그룹별 실적 금액과 계획 금액을 보여줘 (계정그룹, 실적, 계획)
+    gold: |
+      SELECT account_group,
+             SUM(CASE WHEN version='ACTUAL' THEN amount ELSE 0 END) AS actual_amount,
+             SUM(CASE WHEN version='PLAN' THEN amount ELSE 0 END) AS plan_amount
+      FROM mart_financials WHERE year=2025 GROUP BY account_group
+  - id: 21
+    difficulty: medium
+    question: 2026년 가전사업부의 월별 판관비 실적 추이를 보여줘 (월, 판관비)
+    gold: |
+      SELECT month_date, SUM(CASE WHEN account_group='판관비' AND version='ACTUAL' THEN amount ELSE 0 END) AS sga
+      FROM mart_financials WHERE year=2026 AND division='가전사업부' GROUP BY month_date ORDER BY month_date
+  - id: 22
+    difficulty: medium
+    question: 2025년 B2B 채널의 카테고리별 판매금액을 보여줘 (카테고리, 판매금액)
+    gold: |
+      SELECT category, SUM(revenue) AS sales_revenue FROM mart_sales
+      WHERE year=2025 AND channel='B2B' GROUP BY category
+
+  # ---------- hard (8) ----------
+  - id: 23
+    difficulty: hard
+    question: 2025년 전사 매출액의 2024년 대비 성장률(%)을 알려줘
+    gold: |
+      SELECT ROUND((SUM(CASE WHEN year=2025 AND account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END)
+        - SUM(CASE WHEN year=2024 AND account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END)) * 100.0
+        / NULLIF(SUM(CASE WHEN year=2024 AND account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END), 0), 1) AS yoy_growth
+      FROM mart_financials WHERE year IN (2024, 2025)
+  - id: 24
+    difficulty: hard
+    question: 매출이 있는 사업부만 대상으로, 2025년 매출액의 전년 대비 성장률(%)을 사업부별로 보여줘 (사업부, 성장률)
+    gold: |
+      SELECT division, ROUND((SUM(CASE WHEN year=2025 THEN amount ELSE 0 END)
+        - SUM(CASE WHEN year=2024 THEN amount ELSE 0 END)) * 100.0
+        / NULLIF(SUM(CASE WHEN year=2024 THEN amount ELSE 0 END), 0), 1) AS yoy_growth
+      FROM mart_financials
+      WHERE year IN (2024, 2025) AND account_group='매출' AND version='ACTUAL'
+      GROUP BY division
+  - id: 25
+    difficulty: hard
+    question: 2026년 상반기(1~6월) 전사 매출액과 2025년 상반기 매출액, 증감률(%)을 보여줘 (2026상반기, 2025상반기, 증감률)
+    gold: |
+      SELECT SUM(CASE WHEN year=2026 THEN amount ELSE 0 END) AS h1_2026,
+             SUM(CASE WHEN year=2025 THEN amount ELSE 0 END) AS h1_2025,
+             ROUND((SUM(CASE WHEN year=2026 THEN amount ELSE 0 END)
+               - SUM(CASE WHEN year=2025 THEN amount ELSE 0 END)) * 100.0
+               / NULLIF(SUM(CASE WHEN year=2025 THEN amount ELSE 0 END), 0), 1) AS growth_pct
+      FROM mart_financials
+      WHERE year IN (2025, 2026) AND month<=6 AND account_group='매출' AND version='ACTUAL'
+  - id: 26
+    difficulty: hard
+    question: 2025년 제품 카테고리별 판매금액과 전체 대비 비중(%)을 보여줘 (카테고리, 판매금액, 비중)
+    gold: |
+      SELECT category, SUM(revenue) AS sales_revenue,
+             ROUND(SUM(revenue) * 100.0 / SUM(SUM(revenue)) OVER (), 1) AS share_pct
+      FROM mart_sales WHERE year=2025 GROUP BY category
+  - id: 27
+    difficulty: hard
+    question: 2025년 월별 매출액과 연간 누적 매출액을 보여줘 (월, 매출액, 누적매출액)
+    gold: |
+      WITH m AS (
+        SELECT month_date, SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END) AS revenue
+        FROM mart_financials WHERE year=2025 GROUP BY month_date)
+      SELECT month_date, revenue, SUM(revenue) OVER (ORDER BY month_date) AS cum_revenue
+      FROM m ORDER BY month_date
+  - id: 28
+    difficulty: hard
+    question: 2025년 영업이익률(%)이 가장 높은 사업부 하나만 알려줘 (사업부, 영업이익률)
+    gold: |
+      SELECT division, ROUND(SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) * 100.0
+        / NULLIF(SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END), 0), 1) AS operating_margin
+      FROM mart_financials WHERE year=2025 GROUP BY division
+      ORDER BY operating_margin DESC LIMIT 1
+  - id: 29
+    difficulty: hard
+    question: 2025년 각 사업부에서 판관비 실적 금액이 가장 큰 계정을 보여줘 (사업부, 계정명, 금액)
+    gold: |
+      WITH t AS (
+        SELECT division, account_name, SUM(amount) AS amt
+        FROM mart_financials
+        WHERE year=2025 AND account_group='판관비' AND version='ACTUAL'
+        GROUP BY division, account_name)
+      SELECT division, account_name, amt FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY division ORDER BY amt DESC) AS rn FROM t)
+      WHERE rn=1
+  - id: 30
+    difficulty: hard
+    question: 2024년과 2025년의 연도별 영업이익(원)과 영업이익률(%)을 보여줘 (연도, 영업이익, 영업이익률)
+    gold: |
+      SELECT year,
+             SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) AS operating_profit,
+             ROUND(SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) * 100.0
+               / NULLIF(SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END), 0), 1) AS operating_margin
+      FROM mart_financials WHERE year IN (2024, 2025) GROUP BY year

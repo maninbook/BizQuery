@@ -1,0 +1,137 @@
+# BizQuery 시맨틱 레이어 — 메트릭/디멘션 카탈로그
+#
+# 목적: 경영지표의 "단 하나의 정의(single source of truth)"를 SQL 표현으로 자산화한다.
+# NL2SQL 프롬프트는 이 카탈로그를 컨텍스트로 받아, 같은 지표를 항상 같은 산식으로
+# 계산한다 (예: '영업이익'을 물을 때마다 다른 SQL이 나오는 문제를 차단).
+# dbt semantic model / Power BI 시맨틱 모델로 포팅 가능한 구조로 정의했다.
+
+tables:
+  mart_financials:
+    description: 재무 실적/계획 마트 (SAP CO 스타일). 월 × 코스트센터 × 계정 × 버전(ACTUAL/PLAN) 손익 데이터. 매출·원가·판관비·영업이익 등 재무 지표 질의는 반드시 이 테이블 사용.
+    columns:
+      month_date: "월 (DATE, 매월 1일)"
+      year: "연도 (INT)"
+      quarter: "분기 (INT 1~4)"
+      month: "월 (INT 1~12)"
+      cc_id: "코스트센터 코드"
+      cc_name: "코스트센터명 (예: 반도체사업 국내센터)"
+      division: "사업부 (반도체사업부/디스플레이사업부/가전사업부/본사지원)"
+      region: "지역 (국내/미주/아시아)"
+      account_id: "계정 코드"
+      account_name: "계정명 (제품매출, 재료비, 급여 등)"
+      account_group: "계정그룹 (매출/매출원가/판관비)"
+      version: "버전 (ACTUAL=실적, PLAN=계획)"
+      amount: "금액 (원)"
+  mart_sales:
+    description: 제품 판매 마트. 월 × 제품 × 지역 × 채널의 판매 수량·판매금액. 제품/카테고리/지역/채널별 판매 분석 질의는 이 테이블 사용.
+    columns:
+      month_date: "월 (DATE, 매월 1일)"
+      year: "연도 (INT)"
+      quarter: "분기 (INT)"
+      month: "월 (INT)"
+      product_id: "제품 코드"
+      product_name: "제품명 (DRAM 모듈, OLED 패널 등)"
+      category: "제품 카테고리 (메모리/시스템반도체/디스플레이/가전)"
+      region: "지역 (국내/미주/유럽/아시아)"
+      channel: "판매 채널 (온라인/오프라인/B2B)"
+      quantity: "판매 수량 (개)"
+      revenue: "판매 금액 (원)"
+
+metrics:
+  - name: revenue
+    label: 매출액
+    table: mart_financials
+    expression: "SUM(CASE WHEN account_group = '매출' AND version = 'ACTUAL' THEN amount ELSE 0 END)"
+    description: 실적(ACTUAL) 기준 매출 계정 합계 (원)
+  - name: cogs
+    label: 매출원가
+    table: mart_financials
+    expression: "SUM(CASE WHEN account_group = '매출원가' AND version = 'ACTUAL' THEN amount ELSE 0 END)"
+    description: 실적 기준 매출원가 합계 (원)
+  - name: sga
+    label: 판관비
+    table: mart_financials
+    expression: "SUM(CASE WHEN account_group = '판관비' AND version = 'ACTUAL' THEN amount ELSE 0 END)"
+    description: 실적 기준 판매관리비 합계 (원)
+  - name: operating_profit
+    label: 영업이익
+    table: mart_financials
+    expression: "SUM(CASE WHEN version = 'ACTUAL' THEN CASE WHEN account_group = '매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END)"
+    description: 매출 − 매출원가 − 판관비 (실적 기준, 원)
+  - name: operating_margin
+    label: 영업이익률
+    table: mart_financials
+    expression: "ROUND(SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) * 100.0 / NULLIF(SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END), 0), 1)"
+    description: 영업이익 ÷ 매출액 × 100 (%, 소수 1자리)
+  - name: plan_amount
+    label: 계획금액
+    table: mart_financials
+    expression: "SUM(CASE WHEN version = 'PLAN' THEN amount ELSE 0 END)"
+    description: 계획(PLAN) 버전 금액 합계 — 반드시 account_group 필터와 함께 사용
+  - name: plan_attainment
+    label: 계획달성률
+    table: mart_financials
+    expression: "ROUND(SUM(CASE WHEN version='ACTUAL' THEN amount ELSE 0 END) * 100.0 / NULLIF(SUM(CASE WHEN version='PLAN' THEN amount ELSE 0 END), 0), 1)"
+    description: "실적 ÷ 계획 × 100 (%). 특정 account_group(예: 매출)으로 WHERE 필터 후 사용"
+  - name: sales_quantity
+    label: 판매수량
+    table: mart_sales
+    expression: "SUM(quantity)"
+    description: 판매 수량 합계 (개)
+  - name: sales_revenue
+    label: 판매금액
+    table: mart_sales
+    expression: "SUM(revenue)"
+    description: 판매 채널 기준 매출 합계 (원)
+
+dimensions:
+  - {name: year, label: 연도, tables: [mart_financials, mart_sales]}
+  - {name: quarter, label: 분기, tables: [mart_financials, mart_sales]}
+  - {name: month_date, label: 월, tables: [mart_financials, mart_sales]}
+  - {name: division, label: 사업부, tables: [mart_financials]}
+  - {name: cc_name, label: 코스트센터, tables: [mart_financials]}
+  - {name: account_group, label: 계정그룹, tables: [mart_financials]}
+  - {name: account_name, label: 계정, tables: [mart_financials]}
+  - {name: version, label: 버전(실적/계획), tables: [mart_financials]}
+  - {name: product_name, label: 제품, tables: [mart_sales]}
+  - {name: category, label: 제품카테고리, tables: [mart_sales]}
+  - {name: region, label: 지역, tables: [mart_financials, mart_sales]}
+  - {name: channel, label: 채널, tables: [mart_sales]}
+
+# NL2SQL few-shot 질의 예시 (질의 자산화)
+examples:
+  - question: 2025년 사업부별 매출액을 알려줘
+    sql: |
+      SELECT division, SUM(CASE WHEN account_group = '매출' AND version = 'ACTUAL' THEN amount ELSE 0 END) AS revenue
+      FROM mart_financials
+      WHERE year = 2025
+      GROUP BY division
+      ORDER BY revenue DESC
+  - question: 2025년 반도체사업부의 월별 영업이익률 추이를 보여줘
+    sql: |
+      SELECT month_date,
+             ROUND(SUM(CASE WHEN version='ACTUAL' THEN CASE WHEN account_group='매출' THEN amount WHEN account_group IN ('매출원가','판관비') THEN -amount ELSE 0 END ELSE 0 END) * 100.0
+               / NULLIF(SUM(CASE WHEN account_group='매출' AND version='ACTUAL' THEN amount ELSE 0 END), 0), 1) AS operating_margin
+      FROM mart_financials
+      WHERE year = 2025 AND division = '반도체사업부'
+      GROUP BY month_date
+      ORDER BY month_date
+  - question: 2025년 매출 계획달성률이 가장 높은 사업부는?
+    sql: |
+      SELECT division,
+             ROUND(SUM(CASE WHEN version='ACTUAL' THEN amount ELSE 0 END) * 100.0
+               / NULLIF(SUM(CASE WHEN version='PLAN' THEN amount ELSE 0 END), 0), 1) AS plan_attainment
+      FROM mart_financials
+      WHERE year = 2025 AND account_group = '매출'
+      GROUP BY division
+      ORDER BY plan_attainment DESC
+      LIMIT 1
+  - question: 2025년 제품 카테고리별 판매금액 비중은?
+    sql: |
+      SELECT category,
+             SUM(revenue) AS sales_revenue,
+             ROUND(SUM(revenue) * 100.0 / SUM(SUM(revenue)) OVER (), 1) AS share_pct
+      FROM mart_sales
+      WHERE year = 2025
+      GROUP BY category
+      ORDER BY sales_revenue DESC
