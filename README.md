@@ -8,7 +8,7 @@ LLM한테 그냥 SQL 짜달라고 하는 것과 다른 점은 두 가지입니�
 
 ![BizQuery UI](docs/screenshot_ui.png)
 
-## 왜 이렇게 만들었나
+## 설계 배경
 
 NL2SQL을 실무 분석 시스템으로 쓰려고 하면 두 가지가 걸립니다.
 
@@ -63,7 +63,7 @@ Verifier가 3단계로 걸러내고, 실패하면 오류 메시지를 피드백�
 넣어서 전년비나 달성률 질의가 의미 있게 나오도록 했습니다. 팩트+차원 조인과 시간 파생 컬럼은
 마트 뷰(`mart_financials`, `mart_sales`)로 빼뒀습니다.
 
-## 실행
+## 설치 및 실행
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -79,7 +79,7 @@ uvicorn api:app --app-dir src --host 127.0.0.1 --port 8021   # API
 cd web && npm install && npm run dev                          # React (proxy → 8021)
 ```
 
-## 구조
+## 프로젝트 구조
 
 ```
 BizQuery/
@@ -96,15 +96,6 @@ BizQuery/
 └── results/                평가 리포트·차트
 ```
 
-## 한계
-
-- 마트 2개 기준의 평가입니다. 테이블이 수십 개인 실환경이라면 스키마 검색(RAG)과 카탈로그
-  분할 주입이 필요하고, 그때부터 자기교정 루프가 실제로 값을 합니다.
-- 시맨틱 레이어가 자체 YAML 카탈로그입니다. dbt Semantic Layer / MetricFlow나 Power BI
-  시맨틱 모델로 포팅할 수 있게 구조는 맞춰뒀습니다.
-- 데이터 소스를 DuckDB에서 Microsoft Fabric(Lakehouse/Warehouse)으로 바꾸는 것과,
-  Neo4j 기반 지표-조직 관계 그래프는 다음 작업으로 남겨뒀습니다.
-
-## 스택
+## 기술 스택
 
 Python · DuckDB · sqlglot · OpenAI API (gpt-4.1-mini) · FastAPI · React(Vite) · matplotlib
